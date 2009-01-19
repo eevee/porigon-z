@@ -1,0 +1,8 @@
+# the usual suspects
+*.swp
+*.pyc
+*.pyo
+*.egg-info
+
+# data file of...  unspecified format
+*.nds
