@@ -2,7 +2,7 @@ from sys import argv, exit
 
 from nds import DSImage
 
-help = """porigon-z: a Nintendo DS game image reader aimed at Pokemon
+help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...
 
 Commands that should work on any DS image:
@@ -20,7 +20,28 @@ def main():
     image = DSImage(filename)
 
     if command == 'list':
-        for dsfile in image._files:
-            print dsfile.path
+        prev_path_parts = []
 
+        for dsfile in image.dsfiles:
+            if dsfile.path:
+                path = dsfile.path
 
+                # Print a directory header if it changed
+                path_parts = path.split('/')
+                path_parts.pop()  # Drop filename
+                if path_parts != prev_path_parts:
+                    dir_path = '/'.join(path_parts)
+                    print dir_path
+                    prev_path_parts = path_parts
+            else:
+                path = '(no filename)'
+
+            end = dsfile.offset + dsfile.length
+
+            print "%(id)5d 0x%(start)08x 0x%(end)08x %(length)9d %(path)s" % {
+                'id': dsfile.id,
+                'start': dsfile.offset,
+                'end': end,
+                'length': dsfile.length,
+                'path': path,
+            }

@@ -114,6 +114,14 @@ filename_table_struct = Struct('filename_table',
     ),
 )
 
+# http://www.bottledlight.com/ds/index.php/FileFormats/FAT
+fat_struct = GreedyRepeater(
+    Struct('fat',
+        ULInt32('start'),
+        ULInt32('end'),
+    ),
+)
+
 # http://www.bottledlight.com/ds/index.php/FileFormats/NDSFormat
 banner_struct = Struct('banner',
     ULInt16('version'),
@@ -133,18 +141,25 @@ banner_struct = Struct('banner',
 
 class DSFile(object):
     """Represents a file inside a Nintendo DS game image.
-    
+
     Doesn't do a lot at the moment.  So far, each one has `path` and `filename`
     property tacked on when they're created by a DSImage, but that's all.
     """
 
-    # Laaaazy introspection
+    def __init__(self):
+        """Laaaazy constructor."""
+        self.filename = None
+        self.path = None
+        self.offset = 0
+        self.length = 0
+
     def __str__(self):
+        """Extremely lazy introspection."""
         return str(self.__dict__)
 
 class DSImage(object):
     """Represents a Nintendo DS game image."""
-    
+
     def __init__(self, filename):
         """Loads the named file, parsing out some useful header information."""
 
@@ -159,22 +174,45 @@ class DSImage(object):
         self._banner = banner_struct.parse_stream(self._file)
 
         ### Construct a list of files
+        # Grab file offsets from the FAT.  It's variable length with no header
+        # to give a count of files, so let's grab the FAT alone and parse it
+        # greedily rather than worrying about going past its end
+        self._file.seek(self.header.fat_offset)
+        fat_data = self._file.read(self.header.fat_length)
+        fat = fat_struct.parse(fat_data)
+
+        # Create a list of DSFile objects from these offsets
+        self._dsfiles = []
+        for i, fat_record in enumerate(fat):
+            newfile = DSFile()
+            newfile.id = i
+            newfile.offset = fat_record.start
+            newfile.length = fat_record.end - fat_record.start
+            self._dsfiles.append(newfile)
+
+        # Get actual file data; for similar reasons as above, we grab the
+        # whole block and parse it by itself
         self._file.seek(self.header.file_table_offset)
-        # Need to grab the right number of bytes here; table contains relative
-        # offsets, so the construct is much simplified when it starts at 0
-        filename_table = self._file.read(self.header.file_table_length)
-        tbl = filename_table_struct.parse(filename_table)
+        filename_data = self._file.read(self.header.file_table_length)
+        files = filename_table_struct.parse(filename_data)
 
-        # tbl is now a construct of varyingly useful and not-so-much data;
+        # files is now a construct of varyingly useful and not-so-much data;
         # let's turn it into a tree
-        dir_id = 0  # Root dir is 0, and ids are sequential after that
+        # Root dir is 0, and directory ids are sequential after that
+        dir_id = 0
+        # Directories are stored much like files, but we seem to be guaranteed
+        # to see a directory's filename before anything below it, so keep a
+        # dictionary of directories we've seen and their full paths
         seen_dirs = { 0: '' }
-        self._files = []
 
-        directories = [ tbl.root_directory ]
-        directories.extend(tbl.directories)
+        directories = [ files.root_directory ]
+        directories.extend(files.directories)
         for dir in directories:
             dir_path = seen_dirs[dir_id]
+
+            # File ids have a starting point per directory and are consecutive
+            # within a directory.  Weird, but kinda convenient
+            file_id = dir.top_file_id
 
             for filename in dir.filenames:
                 if filename.filename == '':
@@ -185,12 +223,15 @@ class DSImage(object):
                 if filename.metadata.is_directory:
                     seen_dirs[filename.directory_id & 0xfff] = filename.path
                 else:
-                    f = DSFile()
+                    f = self._dsfiles[file_id]
                     f.filename = filename.filename
                     f.path = filename.path
-                    self._files.append(f)
+
+                    file_id += 1
 
             dir_id += 1
+
+        return
 
     @property
     def header(self):
@@ -204,9 +245,9 @@ class DSImage(object):
         return self._banner
 
     @property
-    def files(self):
+    def dsfiles(self):
         """An array of files contained within the game image.
-        
+
         Each file is a DSFile object.
         """
-        return self._files
+        return self._dsfiles
