@@ -1,4 +1,5 @@
-from sys import argv, exit
+import os
+from sys import argv, exit, stderr
 
 from nds import DSImage
 
@@ -45,3 +46,14 @@ def main():
                 'length': dsfile.length,
                 'path': path,
             }
+
+    elif command == 'cat':
+        (dsfilename,) = args
+        # XXX factor this out; do wildcards and ids
+        matches = [dsfile for dsfile in image.dsfiles if dsfile.path == dsfilename]
+
+        if len(matches) > 1:
+            stderr.write("Multiple files matched.  Please specify by file id instead.")
+            return
+
+        print matches[0].contents

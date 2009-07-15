@@ -7,6 +7,8 @@ self-documenting, and I can hardly document all the fields when I don't know
 myself what many of them do.
 """
 
+from weakref import ref
+
 from construct import *
 
 # DS uses UTF-16 null-terminated strings for a lot of text
@@ -146,8 +148,10 @@ class DSFile(object):
     property tacked on when they're created by a DSImage, but that's all.
     """
 
-    def __init__(self):
+    def __init__(self, image):
         """Laaaazy constructor."""
+        self._image = ref(image)
+        self._contents = None
         self.filename = None
         self.path = None
         self.offset = 0
@@ -156,6 +160,20 @@ class DSFile(object):
     def __str__(self):
         """Extremely lazy introspection."""
         return str(self.__dict__)
+
+    @property
+    def image(self):
+        """Returns the DSImage object this file belongs to."""
+        return self._image()  # weak reference
+
+    @property
+    def contents(self):
+        """Lazy-loads the actual contents of the file."""
+        if self._contents == None:
+            self.image._file.seek(self.offset)
+            self._contents = self.image._file.read(self.length)
+
+        return self._contents
 
 class DSImage(object):
     """Represents a Nintendo DS game image."""
@@ -184,7 +202,7 @@ class DSImage(object):
         # Create a list of DSFile objects from these offsets
         self._dsfiles = []
         for i, fat_record in enumerate(fat):
-            newfile = DSFile()
+            newfile = DSFile(image=self)
             newfile.id = i
             newfile.offset = fat_record.start
             newfile.length = fat_record.end - fat_record.start
