@@ -1,3 +1,4 @@
+# encoding: utf8
 """Contains classes that wrap around reading and parsing a DS game image.
 
 `construct` is used to do the parsing, so there are a lot of its `Container`
@@ -140,6 +141,54 @@ banner_struct = Struct('banner',
     UnicodeDSString('title_es', 256),
 )
 
+# http://www.pipian.com/ierukana/hacking/ds_nff.html
+# Nitro is used to clump binary blocks together
+nitro_struct = Struct('nitro',
+    String('magic', 4),
+    ULInt16('bom'),
+    ULInt16('unknown1'),  # always 0x0100?
+    ULInt32('file_size'),
+    ULInt16('unknown2'),
+    ULInt16('num_records'),
+
+    MetaRepeater(
+        lambda ctx: ctx['num_records'],
+        Struct('records',
+            String('magic', 4),
+            ULInt32('length'),
+            # The above fields count against the length, so subtract their size
+            MetaField('data', lambda ctx: ctx['length'] - 8),
+        ),
+    ),
+)
+
+# http://www.pipian.com/ierukana/hacking/ds_narc.html
+# NARC files are an extension of Nitro, used for arrays of small binary blocks
+narc_fatb_struct = Struct('fatb',
+    ULInt32('num_records'),
+    MetaRepeater(
+        lambda ctx: ctx['num_records'],
+        Struct('records',
+            ULInt32('start'),
+            ULInt32('end'),
+        ),
+    ),
+)
+narc_fntb_struct = Struct('fntb',
+    ULInt32('unknown1'),
+    ULInt32('unknown2'),
+    # There are actually fatb.num_records of these, but that is hard to get
+    # with my piecemeal parsing, so we just slurp until we run out of data
+    OptionalGreedyRepeater(
+        Struct('filenames',
+            ULInt8('length'),
+            MetaField('filename', lambda ctx: ctx['length']),
+        ),
+    ),
+)
+# There's also an FIMG block in a NARC file, but alas, we don't do all three
+# blocks at once and this one needs the offsets from the FATB.  Outside code
+# has to parse this.
 
 class DSFile(object):
     """Represents a file inside a Nintendo DS game image.
@@ -147,8 +196,6 @@ class DSFile(object):
     Doesn't do a lot at the moment.  So far, each one has `path` and `filename`
     property tacked on when they're created by a DSImage, but that's all.
     """
-
-    format = 'binary'
 
     def __init__(self, image, path, offset, length):
         """Laaaazy constructor."""
@@ -161,6 +208,25 @@ class DSFile(object):
     def __str__(self):
         """Extremely lazy introspection."""
         return str(self.__dict__)
+
+    def parse_nitro(self):
+        """Parses as a Nitro file.  Returns a Nitro-formatted construct object.
+        """
+        return nitro_struct.parse(self.contents)
+
+    def parse_narc(self):
+        """Parses as a NARC file.  Returns an array of binary records."""
+        # TODO Pokémon doesn't have them, but this ought to return filenames
+        nitro = self.parse_nitro()
+        fatb = narc_fatb_struct.parse(nitro.records[0].data)
+        fntb = narc_fntb_struct.parse(nitro.records[1].data)
+        fimg_data = nitro.records[2].data
+
+        fimg = []
+        for fatb_record in fatb.records:
+            fimg.append(fimg_data[fatb_record.start:fatb_record.end])
+
+        return fimg
 
     @property
     def image(self):
@@ -175,6 +241,7 @@ class DSFile(object):
             self._contents = self.image._file.read(self.length)
 
         return self._contents
+
 
 class DSImage(object):
     """Represents a Nintendo DS game image."""
@@ -245,7 +312,6 @@ class DSImage(object):
                 else:
                     data = dsfile_data[file_id]
                     data['path'] = filename.path
-
                     self._dsfiles.append(DSFile(image=self, **data))
 
                     file_id += 1
