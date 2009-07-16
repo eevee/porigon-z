@@ -148,14 +148,15 @@ class DSFile(object):
     property tacked on when they're created by a DSImage, but that's all.
     """
 
-    def __init__(self, image):
+    format = 'binary'
+
+    def __init__(self, image, path, offset, length):
         """Laaaazy constructor."""
         self._image = ref(image)
         self._contents = None
-        self.filename = None
-        self.path = None
-        self.offset = 0
-        self.length = 0
+        self.path = path
+        self.offset = offset
+        self.length = length
 
     def __str__(self):
         """Extremely lazy introspection."""
@@ -200,13 +201,13 @@ class DSImage(object):
         fat = fat_struct.parse(fat_data)
 
         # Create a list of DSFile objects from these offsets
-        self._dsfiles = []
+        dsfile_data = []
         for i, fat_record in enumerate(fat):
-            newfile = DSFile(image=self)
-            newfile.id = i
-            newfile.offset = fat_record.start
-            newfile.length = fat_record.end - fat_record.start
-            self._dsfiles.append(newfile)
+            newfile = {
+                'offset': fat_record.start,
+                'length': fat_record.end - fat_record.start,
+            }
+            dsfile_data.append(newfile)
 
         # Get actual file data; for similar reasons as above, we grab the
         # whole block and parse it by itself
@@ -223,6 +224,7 @@ class DSImage(object):
         # dictionary of directories we've seen and their full paths
         seen_dirs = { 0: '' }
 
+        self._dsfiles = []
         directories = [ files.root_directory ]
         directories.extend(files.directories)
         for dir in directories:
@@ -241,9 +243,10 @@ class DSImage(object):
                 if filename.metadata.is_directory:
                     seen_dirs[filename.directory_id & 0xfff] = filename.path
                 else:
-                    f = self._dsfiles[file_id]
-                    f.filename = filename.filename
-                    f.path = filename.path
+                    data = dsfile_data[file_id]
+                    data['path'] = filename.path
+
+                    self._dsfiles.append(DSFile(image=self, **data))
 
                     file_id += 1
 
