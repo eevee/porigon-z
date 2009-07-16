@@ -197,10 +197,11 @@ class DSFile(object):
     property tacked on when they're created by a DSImage, but that's all.
     """
 
-    def __init__(self, image, path, offset, length):
+    def __init__(self, image, id, path, offset, length):
         """Laaaazy constructor."""
         self._image = ref(image)
         self._contents = None
+        self.id = id
         self.path = path
         self.offset = offset
         self.length = length
@@ -268,13 +269,16 @@ class DSImage(object):
         fat = fat_struct.parse(fat_data)
 
         # Create a list of DSFile objects from these offsets
-        dsfile_data = []
+        self._dsfiles = []
         for i, fat_record in enumerate(fat):
-            newfile = {
-                'offset': fat_record.start,
-                'length': fat_record.end - fat_record.start,
-            }
-            dsfile_data.append(newfile)
+            dsfile = DSFile(
+                id=i,
+                image=self,
+                offset = fat_record.start,
+                length = fat_record.end - fat_record.start,
+                path=None,  # We may fill this in later
+            )
+            self._dsfiles.append(dsfile)
 
         # Get actual file data; for similar reasons as above, we grab the
         # whole block and parse it by itself
@@ -291,7 +295,6 @@ class DSImage(object):
         # dictionary of directories we've seen and their full paths
         seen_dirs = { 0: '' }
 
-        self._dsfiles = []
         directories = [ files.root_directory ]
         directories.extend(files.directories)
         for dir in directories:
@@ -310,9 +313,8 @@ class DSImage(object):
                 if filename.metadata.is_directory:
                     seen_dirs[filename.directory_id & 0xfff] = filename.path
                 else:
-                    data = dsfile_data[file_id]
-                    data['path'] = filename.path
-                    self._dsfiles.append(DSFile(image=self, **data))
+                    dsfile = self._dsfiles[file_id]
+                    dsfile.path = filename.path
 
                     file_id += 1
 
