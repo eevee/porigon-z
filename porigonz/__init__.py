@@ -70,3 +70,41 @@ def main():
         elif options.format == 'narc-split':
             stderr.write("narc-split makes no sense for cat.")
             return
+
+    elif command == 'extract':
+        # XXX these should be params, via getopt
+        targetdir = 'data'
+        format = 'raw'
+
+        # XXX factor this out; do wildcards and ids
+        if args:
+            matches = [dsfile for dsfile in image.dsfiles if dsfile.path in args]
+        else:
+            matches = image.dsfiles
+
+        # Extract every file to the requested directory
+        for dsfile in matches:
+            dspath = dsfile.path
+            if not dspath:
+                # Default filename
+                dspath = "file%d" % dsfile.id
+
+            dsdir, dsfilename = os.path.split(dspath)
+            # dsdir is probably absolute, and join() wants relative parts, so
+            # prepend a dot
+            dsdir = './' + dsdir
+            fsdir = os.path.join(targetdir, dsdir)
+            try:
+                os.makedirs(fsdir)
+            except OSError:
+                # Already exists; not a problem
+                pass
+
+            # Create the file in the appropriate format
+            # XXX ummm do formats
+            fspath = os.path.join(fsdir, dsfilename)
+            print dspath, '...',
+            fsfile = open(fspath, 'wb')
+            fsfile.write(dsfile.contents)
+            fsfile.close()
+            print 'ok'
