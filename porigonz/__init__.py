@@ -1,3 +1,5 @@
+import binascii
+from optparse import OptionParser
 import os
 from sys import argv, exit, stderr
 
@@ -48,7 +50,10 @@ def main():
             }
 
     elif command == 'cat':
-        (dsfilename,) = args
+        parser = OptionParser()
+        parser.add_option('-f', '--format', dest='format')
+        options, (dsfilename,) = parser.parse_args(args)
+
         # XXX factor this out; do wildcards and ids
         matches = [dsfile for dsfile in image.dsfiles if dsfile.path == dsfilename]
 
@@ -56,4 +61,12 @@ def main():
             stderr.write("Multiple files matched.  Please specify by file id instead.")
             return
 
-        print matches[0].contents
+        if not options.format or options.format == 'raw':
+            print matches[0].contents
+        elif options.format == 'narc-hex':
+            records = matches[0].parse_narc()
+            for record in records:
+                print binascii.hexlify(record)
+        elif options.format == 'narc-split':
+            stderr.write("narc-split makes no sense for cat.")
+            return
