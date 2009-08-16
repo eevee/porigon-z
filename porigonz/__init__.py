@@ -45,6 +45,10 @@ def main():
         exit(0)
 
 
+def command_examine(image, args):
+    print image.banner.title_en
+
+
 def command_list(image, args):
     prev_path_parts = []
 
