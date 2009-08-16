@@ -79,7 +79,8 @@ def command_list(image, args):
 
 def command_cat(image, args):
     parser = OptionParser()
-    parser.add_option('-f', '--format', dest='format')
+    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'text'], default='raw')
+    parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
     options, (dsfilename,) = parser.parse_args(args)
 
     # XXX factor this out; do wildcards and ids
@@ -88,19 +89,40 @@ def command_cat(image, args):
     if len(matches) > 1:
         stderr.write("Multiple files matched.  Please specify by file id instead.")
         return
+    dsfile = matches[0]
 
-    if not options.format or options.format == 'raw':
-        print matches[0].contents
+    # Handle narc splitting.  Whatever combination of file and options we got,
+    # `chunks` should be a list for ease of the following code
+    if options.splitnarc == 'never':
+        split_narc = False
+    elif options.splitnarc == 'always':
+        split_narc = True
+    else:  # auto
+        split_narc = dsfile.is_narc
 
-    elif options.format == 'narc-hex':
-        records = matches[0].parse_narc()
-        for record in records:
-            print binascii.hexlify(record)
+    if split_narc:
+        chunks = dsfile.parse_narc()
+    else:
+        chunks = [dsfile]
 
-    elif options.format == 'narc':
-        records = matches[0].parse_narc()
-        for record in records:
-            print record
+    # Output formatting
+    # Note that we don't want to print a trailing newline for 'raw', unless we
+    # split up a NARC.  Newlines are OK for other converted formats
+    if options.format == 'raw':
+        def print_chunk(chunk):
+            print chunk,
+            if split_narc: print
+
+    elif options.format == 'hex':
+        def print_chunk(chunk):
+            print binascii.hexlify(chunk)
+
+    elif options.format == 'text':
+        raise NotImplementedError
+
+    # Finally, print everything
+    for chunk in chunks:
+        print_chunk(chunk)
 
 
 def command_extract(image, args):

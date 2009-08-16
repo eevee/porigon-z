@@ -243,6 +243,15 @@ class DSFile(object):
 
         return self._contents
 
+    @property
+    def is_narc(self):
+        """Returns True iff this file appears to be a NARC file."""
+        try:
+            nitro = self.parse_nitro()
+            return nitro.magic == 'NARC'
+        except:
+            return False
+
 
 class DSImage(object):
     """Represents a Nintendo DS game image."""
