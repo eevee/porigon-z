@@ -8,8 +8,24 @@ from nds import DSImage
 help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...
 
-Commands that should work on any DS image:
-    list        List the files contained in the image
+Commands:
+list
+    List the files contained in the image.
+
+cat [-f FORMAT] {ds-filename}
+    Prints the contents of a single file within the DS image to standard out.
+
+    -f FORMAT       Specifies the formatting to use.
+
+Formats:
+raw
+    The default.  Does no processing at all; spits out raw binary.
+
+narc
+    Splits a NARC file into multiple binary chunks.
+
+narc-hex
+    Splits a NARC file into multiple hex chunks.
 """
 
 def main():
@@ -71,13 +87,16 @@ def command_cat(image, args):
 
     if not options.format or options.format == 'raw':
         print matches[0].contents
+
     elif options.format == 'narc-hex':
         records = matches[0].parse_narc()
         for record in records:
             print binascii.hexlify(record)
-    elif options.format == 'narc-split':
-        stderr.write("narc-split makes no sense for cat.")
-        return
+
+    elif options.format == 'narc':
+        records = matches[0].parse_narc()
+        for record in records:
+            print record
 
 
 def command_extract(image, args):
