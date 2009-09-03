@@ -1,9 +1,11 @@
 import binascii
 from optparse import OptionParser
 import os
+import pkg_resources
 from sys import argv, exit, stderr
 
 from nds import DSImage
+from porigonz.nds.util import CharacterTable
 
 help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...
@@ -79,7 +81,7 @@ def command_list(image, args):
 
 def command_cat(image, args):
     parser = OptionParser()
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'text'], default='raw')
+    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'pokemon-text'], default='raw')
     parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
     options, (dsfilename,) = parser.parse_args(args)
 
@@ -117,8 +119,15 @@ def command_cat(image, args):
         def print_chunk(chunk):
             print binascii.hexlify(chunk)
 
-    elif options.format == 'text':
-        raise NotImplementedError
+    elif options.format == 'pokemon-text':
+        stream = pkg_resources.resource_stream('porigonz', 'data/pokemon.tbl')
+        tbl = CharacterTable.from_stream(stream)
+
+        def print_chunk(chunk):
+            # LoadingNOW is awesome.
+            strings = tbl.pokemon_translate(chunk)
+            for s in strings:
+                print s
 
     # Finally, print everything
     for chunk in chunks:
