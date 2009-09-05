@@ -79,6 +79,27 @@ def command_list(image, args):
         }
 
 
+def _format_raw(chunk):
+    return chunk
+
+def _format_hex(chunk):
+    return binascii.hexlify(chunk)
+
+def _format_pokemon_text(chunk):
+    # LoadingNOW is awesome.
+    # XXX cache this
+    stream = pkg_resources.resource_stream('porigonz', 'data/pokemon.tbl')
+    tbl = CharacterTable.from_stream(stream)
+
+    strings = tbl.pokemon_translate(chunk)
+    return "\n".join(strings)
+
+formats = {}
+formats['raw'] = _format_raw
+formats['hex'] = _format_hex
+formats['pokemon-text'] = _format_pokemon_text
+
+
 def command_cat(image, args):
     parser = OptionParser()
     parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'pokemon-text'], default='raw')
@@ -108,30 +129,11 @@ def command_cat(image, args):
         chunks = [dsfile]
 
     # Output formatting
-    # Note that we don't want to print a trailing newline for 'raw', unless we
-    # split up a NARC.  Newlines are OK for other converted formats
-    if options.format == 'raw':
-        def print_chunk(chunk):
-            print chunk,
-            if split_narc: print
-
-    elif options.format == 'hex':
-        def print_chunk(chunk):
-            print binascii.hexlify(chunk)
-
-    elif options.format == 'pokemon-text':
-        stream = pkg_resources.resource_stream('porigonz', 'data/pokemon.tbl')
-        tbl = CharacterTable.from_stream(stream)
-
-        def print_chunk(chunk):
-            # LoadingNOW is awesome.
-            strings = tbl.pokemon_translate(chunk)
-            for s in strings:
-                print s
+    format_chunk = formats[options.format]
 
     # Finally, print everything
     for chunk in chunks:
-        print_chunk(chunk)
+        print format_chunk(chunk)
 
 
 def command_extract(image, args):
