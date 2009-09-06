@@ -1,5 +1,5 @@
 # encoding: utf8
-"""Utility functions and classes for working with DS images."""
+"""Utility functions and classes for working with DS text."""
 
 from construct import *
 

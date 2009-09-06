@@ -7,7 +7,7 @@ import shutil
 from sys import argv, exit, stderr, stdout
 
 from nds import DSImage
-from porigonz.nds.util import CharacterTable
+from porigonz.nds.util.text import CharacterTable
 
 help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...
