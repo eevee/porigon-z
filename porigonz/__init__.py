@@ -2,7 +2,9 @@ import binascii
 from optparse import OptionParser
 import os
 import pkg_resources
-from sys import argv, exit, stderr
+import re
+import shutil
+from sys import argv, exit, stderr, stdout
 
 from nds import DSImage
 from porigonz.nds.util import CharacterTable
@@ -123,6 +125,8 @@ def command_cat(image, args):
     else:  # auto
         split_narc = dsfile.is_narc
 
+    # Printing one thing and printing many things works the same way, so just
+    # use a list either way
     if split_narc:
         chunks = dsfile.parse_narc()
     else:
@@ -137,9 +141,18 @@ def command_cat(image, args):
 
 
 def command_extract(image, args):
-    # XXX these should be params, via getopt
-    targetdir = 'data'
-    format = 'raw'
+    # foo.nds extracts to foo/ by default
+    # foo.game extracts to foo.game:data/ by default
+    if re.match(r'\.nds$', image.filename):
+        defaultdir = re.sub(r'\.nds$', image.filename, '')
+    else:
+        defaultdir = image.filename + ':data'
+
+    parser = OptionParser()
+    parser.add_option('-d', '--directory', dest='directory', default=defaultdir)
+    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'pokemon-text'], default='raw')
+    parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
+    options, (dsfilename,) = parser.parse_args(args)
 
     # XXX factor this out; do wildcards and ids
     if args:
@@ -147,29 +160,68 @@ def command_extract(image, args):
     else:
         matches = image.dsfiles
 
+    # Narc splitting
+    if options.splitnarc == 'never':
+        split_narc = False
+    elif options.splitnarc == 'always':
+        split_narc = True
+    else:  # auto
+        split_narc = dsfile.is_narc
+
+    # Output formatting
+    format_chunk = formats[options.format]
+
     # Extract every file to the requested directory
     for dsfile in matches:
         dspath = dsfile.path
         if not dspath:
-            # Default filename
+            # Construct a default filename
             dspath = "file%d" % dsfile.id
 
-        dsdir, dsfilename = os.path.split(dspath)
-        # dsdir is probably absolute, and join() wants relative parts, so
-        # prepend a dot
-        dsdir = './' + dsdir
-        fsdir = os.path.join(targetdir, dsdir)
-        try:
-            os.makedirs(fsdir)
-        except OSError:
-            # Already exists; not a problem
-            pass
-
-        # Create the file in the appropriate format
-        # XXX ummm do formats
-        fspath = os.path.join(fsdir, dsfilename)
         print dspath, '...',
-        fsfile = open(fspath, 'wb')
-        fsfile.write(dsfile.contents)
-        fsfile.close()
+        stdout.flush()
+
+        # dspath is probably absolute, and we need relative parts, so prepend a
+        # dot
+        dspath = './' + dspath
+
+        if split_narc:
+            # Split the file and write the pieces all inside a directory
+            dsdir = dspath
+            fsdir = os.path.join(options.directory, dsdir)
+
+            # Delete the target if it already exists.  This *should* only
+            # delete existing extracted files.  Who would have real files
+            # called poke_msg.narc?
+            if os.path.exists(fsdir):
+                shutil.rmtree(fsdir)
+
+            os.makedirs(fsdir)
+
+            chunks = dsfile.parse_narc()
+            for n, chunk in enumerate(chunks):
+                dsfilename = unicode(n)
+
+                # Create the file in the appropriate format
+                fspath = os.path.join(fsdir, dsfilename)
+                fsfile = open(fspath, 'wb')
+                fsfile.write( format_chunk(chunk) )
+                fsfile.close()
+
+        else:
+            # Write the entire file to a..  file
+            dsdir, dsfilename = os.path.split(dspath)
+            fsdir = os.path.join(options.directory, dsdir)
+
+            if os.path.exists(fsdir):
+                shutil.rmtree(fsdir)
+
+            os.makedirs(fsdir)
+
+            # Create the file in the appropriate format
+            fspath = os.path.join(fsdir, dsfilename)
+            fsfile = open(fspath, 'wb')
+            fsfile.write( format_chunk(dsfile.contents) )
+            fsfile.close()
+
         print 'ok'

@@ -258,6 +258,7 @@ class DSImage(object):
 
     def __init__(self, filename):
         """Loads the named file, parsing out some useful header information."""
+        self.filename = filename
 
         self._file = file(filename, 'rb')
 
