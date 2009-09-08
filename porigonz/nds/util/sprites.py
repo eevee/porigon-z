@@ -111,7 +111,12 @@ class Sprite(object):
         This encryption is only used for the Pokémon themselves and trainers.
         Items, berries, the map, the bag, etc. are all regular DS sprites.
 
-        Encryption is an affine cipher, apparently based on the Pokémon PRNG.
+        Encryption appears to be done by producing a series of 16-bit integers
+        from the inverse of the Pokémon PRNG (a linear congruential generator),
+        then XORing that series with the entire image, reinterpreted as 16-bit
+        integers.  The game then decrypts the images by doing the same thing in
+        reverse, using the first or last few pixels in the image as the seed to
+        the PRNG to reproduce the same mask.
         """
 
         self = cls()
@@ -128,11 +133,12 @@ class Sprite(object):
         mult = 0xeb65
         # Platinum
         # These actually produce the same sequence as D/P, only backwards.  It
-        # appears the mask in D/P started at the end and was generated
-        # backwards, but some sprites in Platinum have a non-blank last pixel,
-        # so they had to switch it around and use the first pixel (with the
-        # same constants) as a seed instead.  I'm always using the first pixel
-        # as the seed, so I have inverse constants
+        # seems the encryption mask in D/P started at the beginning, so the
+        # decryption had to start at the end—but some sprites in Platinum have
+        # non-blank last pixels.  So they had to switch it around and have the
+        # first pixel (with the same constants) be the decryption seed instead.
+        # I'm always using the first pixel as the seed, thus I have different
+        # constants.
         # add = 0x89c3  # appears to be the first dummy block only?
         add = 0x6073
         mult = 0x4e6d
