@@ -3,6 +3,8 @@
 
 from construct import *
 
+from porigonz.nds.util import cap_to_bits
+
 pokemon_encrypted_text_struct = Struct('pokemon_text',
     ULInt16('count'),
     ULInt16('key'),
@@ -14,9 +16,6 @@ pokemon_encrypted_text_struct = Struct('pokemon_text',
         ),
     ),
 )
-
-def cap_to_bits(n, bits=32):
-    return n & ((1 << bits) - 1)
 
 class CharacterTable(object):
     def __init__(self):

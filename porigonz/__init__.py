@@ -8,6 +8,7 @@ from sys import argv, exit, stderr, stdout
 
 from nds import DSImage
 from porigonz.nds.util.text import CharacterTable
+from porigonz.nds.util.sprites import Palette, Sprite
 
 help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...
@@ -96,15 +97,24 @@ def _format_pokemon_text(chunk):
     strings = tbl.pokemon_translate(chunk)
     return "\n".join(strings)
 
+def _format_pokemon_sprite(chunk):
+    if not chunk:
+        return ''
+    elif len(chunk) <= 100:
+        return Palette(chunk).png()
+    else:
+        return Sprite.from_pokemon(chunk).png()
+
 formats = {}
 formats['raw'] = _format_raw
 formats['hex'] = _format_hex
 formats['pokemon-text'] = _format_pokemon_text
+formats['pokemon-sprite'] = _format_pokemon_sprite
 
 
 def command_cat(image, args):
     parser = OptionParser()
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'pokemon-text'], default='raw')
+    parser.add_option('-f', '--format', dest='format', type='choice', choices=formats.keys(), default='raw')
     parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
     options, (dsfilename,) = parser.parse_args(args)
 
@@ -150,29 +160,29 @@ def command_extract(image, args):
 
     parser = OptionParser()
     parser.add_option('-d', '--directory', dest='directory', default=defaultdir)
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=['raw', 'hex', 'pokemon-text'], default='raw')
+    parser.add_option('-f', '--format', dest='format', type='choice', choices=formats.keys(), default='raw')
     parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
-    options, (dsfilename,) = parser.parse_args(args)
+    options, dsfiles = parser.parse_args(args)
 
     # XXX factor this out; do wildcards and ids
-    if args:
-        matches = [dsfile for dsfile in image.dsfiles if dsfile.path in args]
+    if dsfiles:
+        matches = [dsfile for dsfile in image.dsfiles if dsfile.path in dsfiles]
     else:
         matches = image.dsfiles
-
-    # Narc splitting
-    if options.splitnarc == 'never':
-        split_narc = False
-    elif options.splitnarc == 'always':
-        split_narc = True
-    else:  # auto
-        split_narc = dsfile.is_narc
 
     # Output formatting
     format_chunk = formats[options.format]
 
     # Extract every file to the requested directory
     for dsfile in matches:
+        # Narc splitting
+        if options.splitnarc == 'never':
+            split_narc = False
+        elif options.splitnarc == 'always':
+            split_narc = True
+        else:  # auto
+            split_narc = dsfile.is_narc
+
         dspath = dsfile.path
         if not dspath:
             # Construct a default filename
@@ -181,9 +191,8 @@ def command_extract(image, args):
         print dspath, '...',
         stdout.flush()
 
-        # dspath is probably absolute, and we need relative parts, so prepend a
-        # dot
-        dspath = './' + dspath
+        # dspath is probably absolute, and we need relative parts
+        dspath = dspath.strip('/')
 
         if split_narc:
             # Split the file and write the pieces all inside a directory

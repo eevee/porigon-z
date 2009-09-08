@@ -12,6 +12,8 @@ from weakref import ref
 
 from construct import *
 
+# Useful for much of the below: http://llref.emutalk.net/nds_formats.htm
+
 # DS uses UTF-16 null-terminated strings for a lot of text
 def UnicodeDSString(name, length, *args, **kwargs):
     kwargs.setdefault('encoding', 'utf-16')
