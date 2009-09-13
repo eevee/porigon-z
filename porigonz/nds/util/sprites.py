@@ -34,7 +34,7 @@ ttlp_struct = Struct('ttlp',
 
 class Palette(object):
     """Represents a DS palette.
-    
+
     After creating a palette, a list of color stored as r, g, b tuples is
     available from the colors property.
     """
@@ -44,7 +44,7 @@ class Palette(object):
         self.colors = []
 
         nclr = nclr_struct.parse(chunk)
-            
+
         # XXX this SHOULD have two sections according to format docs.
         # ttlp.data won't leak into a following section, at least
         ttlp = ttlp_struct.parse(nclr.data)
@@ -70,11 +70,15 @@ class Palette(object):
         img.save(buffer, 'PNG')
         return buffer.getvalue()
 
+    def __str__(self):
+        """Returns this palette as a PNG."""
+        return self.png()
+
 
 # Nintendo character graphic resource
 rgcn_struct = Struct('rgcn',
     Const(Bytes('magic', 4), 'RGCN'),
-    Const(Bytes('bom', 4), '\xff\xfe\x00\x01'),
+    Bytes('bom', 4),   # \xff\xfe\x01\x01 or \xff\xfe\x00\x01
     ULInt32('length'),
     Const(ULInt16('header_length'), 0x10),
     ULInt16('num_sections'),
@@ -85,7 +89,7 @@ rgcn_struct = Struct('rgcn',
 # Most of this seems totally wrong for Pokémon
 rahc_struct = Struct('rahc',
     Const(Bytes('magic', 4), 'RAHC'),
-    Const(ULInt8('header_length'), 0x20),
+    ULInt8('header_length'), # 0x20),
     BitStruct('length',
         BitField('length', 24),
     ),
@@ -96,13 +100,32 @@ rahc_struct = Struct('rahc',
     ULInt32('data_size'),
     ULInt32('unknown1'),
 #    MetaField('data', lambda ctx: ctx['length'] - ctx['header_length']),
-    MetaField('data', lambda ctx: 6400),  # XXX length is off by a factor of 1024??
+    MetaField('data', lambda ctx: 2048),  # XXX length is off by a factor of 1024??
 )
 
 Size = namedtuple('Size', ['width', 'height'])
 
 class Sprite(object):
     """Represents a DS sprite."""
+
+    @classmethod
+    def from_standard(cls, chunk):
+        """Parses a nybble-based sprite from a chunk."""
+
+        self = cls()
+
+        rgcn = rgcn_struct.parse(chunk)
+        rahc = rahc_struct.parse(rgcn.data)
+
+        # XXX make these less constant somehow
+        self.size = Size(width=32, height=128)
+
+        self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
+        for i, word in enumerate(word_iterator(rahc.data, 4)):
+            x, y = self.get_pos(i, tile_size=8)
+            self.pixels[x][y] = word
+
+        return self
 
     @classmethod
     def from_pokemon(cls, chunk):
@@ -166,10 +189,38 @@ class Sprite(object):
 
         return self
 
-    def get_pos(self, idx):
+    def get_pos(self, idx, tile_size=None):
         """Given a linearized index, returns the x, y coordinates within the
         image.
+
+        If `tile_size` is provided, the image is assumed to be constructed from
+        square tiles of that size, and each tile is filled before the next is
+        begin.
         """
+        if tile_size:
+            # Tiles seem to take the nybbles in the other they appear, ignoring
+            # endianness entirely.  So every even column is swapped with the
+            # following odd column
+            if idx % 2 == 0:
+                idx += 1
+            else:
+                idx -= 1
+
+            tile_no = idx // tile_size ** 2
+            # coordinates of the tile; 0,0 is first tile, 0,1 is second, etc
+            tile_x = tile_no % (self.size.width // tile_size)
+            tile_y = tile_no // (self.size.width // tile_size)
+
+            # idx within the tile
+            tile_idx = idx % tile_size ** 2
+
+            # Now we just need the x,y within the tile, plus the offsets for
+            # the tile itself
+            return (tile_x * tile_size + tile_idx %  tile_size,
+                    tile_y * tile_size + tile_idx // tile_size)
+
+
+        # Without tiles, this is rather simpler
         return idx % self.size.width, idx // self.size.width
 
     def fake_color(self, idx):
@@ -178,14 +229,28 @@ class Sprite(object):
         sat = idx * 255 / 15
         return sat, sat, sat
 
-    def png(self):
-        """Returns this sprite as a PNG.  Colors are merely shades of gray."""
-        img = Image.new(mode='RGB', size=self.size, color=None)
+    def png(self, palette=None):
+        """Returns this sprite as a PNG.  Colors are merely shades of gray,
+        unless a palette is provided."""
+        img = Image.new(mode='RGBA', size=self.size, color=None)
 
+        if palette:
+            colors = palette.colors
+        else:
+            colors = [(sat, sat, sat) for sat in ((15 - _) * 255 / 15 for _ in range(16))]
+
+        # Add alpha channel.  First color is always transparent
+        colors = [(0, 0, 0, 0)] + [color + (255,) for color in colors[1:]]
+
+        data = img.load()
         for x in xrange(self.size.width):
             for y in xrange(self.size.height):
-                img.putpixel((x, y), self.fake_color(self.pixels[x][y]))
+                data[x, y] = colors[ self.pixels[x][y] ]
 
         buffer = StringIO()
         img.save(buffer, 'PNG')
         return buffer.getvalue()
+
+    def __str__(self):
+        """Returns this sprite as a PNG."""
+        return self.png()

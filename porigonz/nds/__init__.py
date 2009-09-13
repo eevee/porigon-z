@@ -12,6 +12,8 @@ from weakref import ref
 
 from construct import *
 
+from porigonz.nds import util
+
 # Useful for much of the below: http://llref.emutalk.net/nds_formats.htm
 
 # DS uses UTF-16 null-terminated strings for a lot of text
@@ -218,7 +220,7 @@ class DSFile(object):
         return nitro_struct.parse(self.contents)
 
     def parse_narc(self):
-        """Parses as a NARC file.  Returns an array of binary records."""
+        """Parses as a NARC file.  Returns an array of objects of some sort."""
         # TODO Pokémon doesn't have them, but this ought to return filenames
         nitro = self.parse_nitro()
         fatb = narc_fatb_struct.parse(nitro.records[0].data)
@@ -226,14 +228,16 @@ class DSFile(object):
         fimg_data = nitro.records[2].data
 
         fimg = []
+        last_sprite = None
         for fatb_record in fatb.records:
-            fimg.append(fimg_data[fatb_record.start:fatb_record.end])
+            data = fimg_data[fatb_record.start:fatb_record.end]
+            fimg.append(data)
 
         return fimg
 
     @property
     def image(self):
-        """Returns the DSImage object this file belongs to."""
+        """The DSImage object this file belongs to."""
         return self._image()  # weak reference
 
     @property

@@ -6,7 +6,8 @@ import re
 import shutil
 from sys import argv, exit, stderr, stdout
 
-from nds import DSImage
+from porigonz.nds import DSImage
+from porigonz.nds import format
 from porigonz.nds.util.text import CharacterTable
 from porigonz.nds.util.sprites import Palette, Sprite
 
@@ -82,39 +83,9 @@ def command_list(image, args):
         }
 
 
-def _format_raw(chunk):
-    return chunk
-
-def _format_hex(chunk):
-    return binascii.hexlify(chunk)
-
-def _format_pokemon_text(chunk):
-    # LoadingNOW is awesome.
-    # XXX cache this
-    stream = pkg_resources.resource_stream('porigonz', 'data/pokemon.tbl')
-    tbl = CharacterTable.from_stream(stream)
-
-    strings = tbl.pokemon_translate(chunk)
-    return "\n".join(strings)
-
-def _format_pokemon_sprite(chunk):
-    if not chunk:
-        return ''
-    elif len(chunk) <= 100:
-        return Palette(chunk).png()
-    else:
-        return Sprite.from_pokemon(chunk).png()
-
-formats = {}
-formats['raw'] = _format_raw
-formats['hex'] = _format_hex
-formats['pokemon-text'] = _format_pokemon_text
-formats['pokemon-sprite'] = _format_pokemon_sprite
-
-
 def command_cat(image, args):
     parser = OptionParser()
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=formats.keys(), default='raw')
+    parser.add_option('-f', '--format', dest='format', default='raw')
     parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
     options, (dsfilename,) = parser.parse_args(args)
 
@@ -140,14 +111,15 @@ def command_cat(image, args):
     if split_narc:
         chunks = dsfile.parse_narc()
     else:
-        chunks = [dsfile]
+        chunks = [ dsfile ]
 
     # Output formatting
-    format_chunk = formats[options.format]
+    format_name = re.sub('-', '_', options.format)
+    formatter = getattr(format, format_name)
 
     # Finally, print everything
-    for chunk in chunks:
-        print format_chunk(chunk)
+    for chunk in formatter(chunks):
+        print chunk
 
 
 def command_extract(image, args):
@@ -160,7 +132,7 @@ def command_extract(image, args):
 
     parser = OptionParser()
     parser.add_option('-d', '--directory', dest='directory', default=defaultdir)
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=formats.keys(), default='raw')
+    parser.add_option('-f', '--format', dest='format', default='raw')
     parser.add_option('-s', '--split-narc', dest='splitnarc', type='choice', choices=['always', 'never', 'auto'], default='auto')
     options, dsfiles = parser.parse_args(args)
 
@@ -171,7 +143,8 @@ def command_extract(image, args):
         matches = image.dsfiles
 
     # Output formatting
-    format_chunk = formats[options.format]
+    format_name = re.sub('-', '_', options.format)
+    formatter = getattr(format, format_name)
 
     # Extract every file to the requested directory
     for dsfile in matches:
@@ -194,6 +167,16 @@ def command_extract(image, args):
         # dspath is probably absolute, and we need relative parts
         dspath = dspath.strip('/')
 
+        # Get the chunks we're working with here
+        if split_narc:
+            chunks = dsfile.parse_narc()
+        else:
+            chunks = [ dsfile.contents ]
+
+        # Heart of the matter: apply formatting
+        formatted_chunks = formatter(chunks)
+
+        # Spit it all out as appropriate
         if split_narc:
             # Split the file and write the pieces all inside a directory
             dsdir = dspath
@@ -208,13 +191,12 @@ def command_extract(image, args):
             os.makedirs(fsdir)
 
             chunks = dsfile.parse_narc()
-            for n, chunk in enumerate(chunks):
+            for n, chunk in enumerate(formatted_chunks):
                 dsfilename = unicode(n)
 
-                # Create the file in the appropriate format
                 fspath = os.path.join(fsdir, dsfilename)
                 fsfile = open(fspath, 'wb')
-                fsfile.write( format_chunk(chunk) )
+                fsfile.write(str( chunk ))
                 fsfile.close()
 
         else:
@@ -230,7 +212,7 @@ def command_extract(image, args):
             # Create the file in the appropriate format
             fspath = os.path.join(fsdir, dsfilename)
             fsfile = open(fspath, 'wb')
-            fsfile.write( format_chunk(dsfile.contents) )
+            fsfile.write(chunks[0])
             fsfile.close()
 
         print 'ok'
