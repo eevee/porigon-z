@@ -9,6 +9,8 @@ def word_iterator(source, word_size):
     each.
     """
 
+    mask = (1 << word_size) - 1
+
     current_word = 0
     current_len = 0
     for ch in source:
@@ -18,10 +20,9 @@ def word_iterator(source, word_size):
 
         # If there are enough bits for a word, split them off and yield
         while current_len >= word_size:
-            extra_bits = current_len - word_size
-            new_word = current_word >> extra_bits
+            new_word = current_word & mask
 
-            current_word = current_word & ~(new_word << extra_bits)
+            current_word >>= word_size
             current_len -= word_size
 
             yield new_word

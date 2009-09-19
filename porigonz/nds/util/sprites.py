@@ -3,6 +3,7 @@
 
 from collections import namedtuple
 from cStringIO import StringIO
+from itertools import izip
 
 from construct import *
 from PIL import Image
@@ -168,24 +169,27 @@ class Sprite(object):
 
         # Simple mask generator
         def mask_generator():
-            key = next(word_iterator(rahc.data[0:2], 16))
+            key = (word_iterator(rahc.data[0:2], 16)).next()
             while True:
                 yield key
                 key = cap_to_bits(key * mult + add, 16)
 
-        # Unmask the sprite data
-        mask = mask_generator()
-        self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
-        for i, word in enumerate(word_iterator(rahc.data, 16)):
-            unmasked = word ^ next(mask)
+        def pixel_generator():
+            # Unmask the sprite data
+            for word, mask in izip(word_iterator(rahc.data, 16),
+                                   mask_generator()):
+                unmasked = word ^ mask
+                # This is 16 bits, and there are four bits per pixel, so we
+                # have four pixels
+                for _ in range(4):
+                    yield cap_to_bits(unmasked, 4)
+                    unmasked >>= 4
 
-            # This is 16 bits, and there are four bits per pixel, so we have
-            # four pixels
-            x, y = self.get_pos(i * 4)
-            for _ in range(4):
-                self.pixels[x][y] = unmasked & 0x0f
-                unmasked >>= 4
-                x += 1
+        self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
+        for i, pixel in enumerate(pixel_generator()):
+            x, y = self.get_pos(i)
+            self.pixels[x][y] = pixel
+        print i, x, y
 
         return self
 
@@ -198,14 +202,6 @@ class Sprite(object):
         begin.
         """
         if tile_size:
-            # Tiles seem to take the nybbles in the other they appear, ignoring
-            # endianness entirely.  So every even column is swapped with the
-            # following odd column
-            if idx % 2 == 0:
-                idx += 1
-            else:
-                idx -= 1
-
             tile_no = idx // tile_size ** 2
             # coordinates of the tile; 0,0 is first tile, 0,1 is second, etc
             tile_x = tile_no % (self.size.width // tile_size)

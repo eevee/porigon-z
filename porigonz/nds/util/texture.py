@@ -3,10 +3,7 @@ from construct.lib import int_to_bin, bin_to_int
 from PIL import Image
 from cStringIO import StringIO
 
-try:
-    from . import word_iterator
-except ValueError:
-    from porigonz.nds.util import word_iterator
+from porigonz.nds.util import word_iterator
 
 #http://tahaxan.arcnor.com/forums/index.php?action=printpage%3Btopic=34.0
 #http://tahaxan.arcnor.com/forums/index.php?topic=65.0
@@ -180,18 +177,16 @@ class Texture:
         self.format = format = info.format
         self.size = (info.width, info.height)
 
+        # [width][height]
         self.pixels = [[0] * self.info.height for _ in range(self.info.width)]
         pixdata = data.value
         if format == 3:
             # 16-color palette
-            le_fix = 1
             it = word_iterator(pixdata, 4)
-            for x in range(self.info.height):
-                for y in range(self.info.width):
+            for x in range(self.info.width):
+                for y in range(self.info.height):
                     pix = it.next()
-                    self.pixels[y+le_fix][x] = pix
-                    #self.pixels[x][y] = (pix >> 4) & 0xff
-                    le_fix *= -1
+                    self.pixels[x][y] = pix
         elif format == 5:
             raise NotImplementedError
         else:
