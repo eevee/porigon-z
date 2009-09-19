@@ -16,6 +16,7 @@ list, always use `list()` on the return value.
 import binascii
 
 from porigonz.nds.util.sprites import Sprite, Palette
+from porigonz.nds.util.texture import NSBTX
 
 
 def raw(chunks, *args, **kwargs):
@@ -49,6 +50,27 @@ def sprite_part(chunks, *args, **kwargs):
 
     return generator(chunks)
 
+
+
+def texture(chunks, *args, **kwargs):
+    """textures"""
+
+    for chunk in chunks:
+        if chunk[:4] == 'BTX0':
+            btx = NSBTX(chunk)
+            tex = btx.blocks[0]
+
+            yield tex
+        elif chunk[:4] == 'BMD0':
+            # this might have a texture we can use, but 
+            # i don't know how to deal with them yet
+            pass
+        else:
+            pass
+
+        #palette = tex.palettes[0]
+        #for texture in tex.textures:
+        #    yield texture.png()
 
 
 ### Pokémon-specific

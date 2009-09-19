@@ -2,6 +2,8 @@ from construct import *
 from construct.lib import int_to_bin, bin_to_int
 from PIL import Image
 from cStringIO import StringIO
+from collections import namedtuple
+from itertools import izip as zip
 
 from porigonz.nds.util import word_iterator
 
@@ -10,6 +12,7 @@ from porigonz.nds.util import word_iterator
 
 bpp = [0, 8, 2, 4, 4, 8, 2, 8, 16]
 
+# XXX call this Div8 instead?
 class TimesEight(Adapter):
     """these structs seem to contain a lot of integers that are off by a factor of eight. this class corrects that"""
     def _encode(self, obj, ctx):
@@ -37,9 +40,9 @@ block_header = Struct('header',
     Array(lambda ctx: ctx.count, ULInt32('unknown0')),
 )
 
-filenames = Array(lambda ctx: ctx.header.count, String('names', 16, padchar="\x00"))
+name_array = Array(lambda ctx: ctx.header.count, String('names', 16, padchar="\x00"))
 
-texture_struct = Struct('texture',
+texture_def_struct = Struct('texture',
     block_header,
 
     Const(ULInt16(None), 8),
@@ -69,23 +72,24 @@ texture_struct = Struct('texture',
     )),
     #Array(lambda ctx: ctx.header.count,),
 
-    filenames
+    name_array
 )
 
-palette_struct = Struct('palette',
+palette_def_struct = Struct('palette',
     block_header,
 
     Const(ULInt16(None), 4),
     ULInt16('length'),
     Array(lambda ctx: ctx.header.count, TimesEight(ULInt32('offsets'))),
 
+    #can't figure out the palette length without knowing the bpp of the
+    #texture, so just grab the data. it's not very big.
     Pointer(
-        #lambda ctx: ctx._.start + ctx._.palette_data_ptr + ctx.offset,
         lambda ctx: ctx._.start + ctx._.palette_data_ptr,
         MetaField('data', lambda ctx: ctx._.length - ctx._.palette_data_ptr)
     ),
 
-    filenames
+    name_array
 )
 
 tex0_struct = Struct('tex0',
@@ -113,8 +117,8 @@ tex0_struct = Struct('tex0',
     ULInt32('palette_def_ptr'),
     ULInt32('palette_data_ptr'),
     
-    texture_struct,
-    palette_struct,
+    texture_def_struct,
+    palette_def_struct,
 
     #OnDemandPointer(lambda ctx: ctx.texture_data_ptr, )
 )
@@ -127,75 +131,133 @@ btx0_struct = Struct('btx0',
     Const(ULInt16('header_length'), 0x10),
     ULInt16('count'),
 
-    Array(lambda ctx: ctx.count, ULInt32('block_offset')),
-
-    tex0_struct,
+    Array(lambda ctx: ctx.count, Struct('blocks',
+        ULInt32('offset'),
+        OnDemandPointer(lambda ctx: ctx.offset, tex0_struct),
+    )),
 )
 
 __metaclass__ = type
 
-#class NSBTX:
-#    def __init__(self, chunk):
-#       btx = btx0_struct.parse(chunk)
-#       TextureList(self, btx.tex0)
+Size = namedtuple('Size', 'width height')
 
-class TextureList:
+class NSBTX:
     def __init__(self, chunk):
-        if hasattr(chunk, 'read'):
-            btx0 = btx0_struct.parse_stream(chunk)
-        else:
-            btx0 = btx0_struct.parse(chunk)
+       self.btx0 = btx0_struct.parse(chunk)
+       self.blocks = [TextureBlock(b.tex0.value) for b in self.btx0.blocks]
+
+class TextureBlock:
+    def __init__(self, tex0):
+        self.tex0 = tex0
         
-        self.btx0 = btx0 # i'm not sure if i even need to keep this around
-        self.tex0 = btx0.tex0
-        
-        self.texture_count = self.tex0.texture.header.count
-        self.palette_count = self.tex0.palette.header.count
+        self.texture_count = tex0.texture.header.count
+        self.palette_count = tex0.palette.header.count
+
+        self.textures = [Texture(t, t.data) for t in tex0.texture.info]
+        self.palettes = [Palette(tex0.palette.data[offset:])
+                         for offset in tex0.palette.offsets]
+
+        for t, name in zip(self.textures, tex0.texture.names):
+            t.name = name
 
     def get_texture(self, value):
         if hasattr(value, '__index__'):
             value = value.__index__()
         else:
             #filename
-            value = self.tex0.texture.filename.index(value)
+            value = self.tex0.texture.names.index(value)
         return Texture(self.tex0.texture.info[value],
                        self.tex0.texture.info[value].data)
 
     __getitem__ = get_texture
 
-    def png(self, tex, pal=None):
-        """make a png from the texture (and palette) of the given indicies"""
-        tex = self[tex]
-        palette = Palette(tex.format,
-                          self.tex0.palette.data[self.tex0.palette.offsets[pal]:])
-        return tex.png(palette)
+    def image(self, palette=None):
+        width = min(4, self.texture_count)
+        height = self.texture_count // width
+
+        #i'm assuming that all the textures are the same size
+        size = self.textures[0].size
+        #flag = False
+        #for t in self.textures:
+        #    if t.size != size:
+        #        print size
+        #        flag = True
+        #if flag:
+        #    return None
+        
+        textures = self.textures[:]
+        if '.' in textures[0].name:
+            try:
+                textures.sort(key=(lambda x: int(x.name.split('.')[1])))
+            except ValueError:
+                pass
+
+        if palette is None:
+            palette = self.palettes[0]
+
+        bigimg = Image.new(mode="RGBA", size=(size.width*width, size.height*height))
+
+        for t, (x, y) in zip(textures, 
+                             ((x, y) for y in xrange(height)
+                                       for x in xrange(width))):
+            point = (x * size.width, y * size.height)
+            img = t.image(palette)
+            bigimg.paste(img, point)
+
+        return bigimg
+            
+        #palette = Palette(tex.format,
+        #                  self.tex0.palette.data[self.tex0.palette.offsets[pal]:])
+        #return tex.png(palette)
+
+    def png(self, palette=None):
+        img = self.image(palette)
+
+        buffer = StringIO()
+        img.save(buffer, 'PNG')
+        return buffer.getvalue()
+
+
+    def __str__(self):
+        return self.png()
         
 class Texture:
     def __init__(self, info, data):
         self.info = info
         self.data = data
-        self.format = format = info.format
-        self.size = (info.width, info.height)
+        self.format = info.format
+        self.size = Size(info.width, info.height)
+        self._pixels = None
 
+    @property
+    def pixels(self):
+        if self._pixels is not None:
+            return self._pixels
         # [width][height]
-        self.pixels = [[0] * self.info.height for _ in range(self.info.width)]
-        pixdata = data.value
+        self._pixels = [[0] * self.size.height for _ in range(self.size.width)]
+        pixdata = self.data.value
+        format = self.format
         if format == 3:
             # 16-color palette
             it = word_iterator(pixdata, 4)
-            for x in range(self.info.width):
-                for y in range(self.info.height):
+            for y in range(self.info.height):
+                for x in range(self.info.width):
                     pix = it.next()
-                    self.pixels[x][y] = pix
+                    self._pixels[x][y] = pix
         elif format == 5:
             raise NotImplementedError
         else:
             raise NotImplementedError
 
-    def png(self, palette = None):
+        return self._pixels
+
+
+    def image(self, palette=None):
         img = Image.new(mode='RGBA', size=self.size, color=None)
 
         if palette:
+            if palette.format is None:
+                palette.format = self.format
             colors = palette.colors
         else:
             colors = [(sat, sat, sat) for sat in ((15 - _) * 255 / 15 for _ in range(16))]
@@ -207,30 +269,52 @@ class Texture:
         data = img.load()
         for x in xrange(self.info.width):
             for y in xrange(self.info.height):
-                data[x, y] = colors[ self.pixels[x][y] ]
+                data[x, y] = colors[self.pixels[x][y]]
+
+        return img
+
+    def png(self, palette=None):
+        img = self.image(palette)
 
         buffer = StringIO()
         img.save(buffer, 'PNG')
         return buffer.getvalue()
+
+    def __str__(self):
+        return self.png()
         
 # http://nocash.emubase.de/gbatek.htm#ds3dtextureformats
 class Palette:
-    def __init__(self, format, data):
+    def __init__(self, data, format=None):
         self.format = format
         self.data = data
 
         self.colors = []
 
-        if format == 5:
+
+    def set_format(self, format):
+        if format is None:
+            self._format = None
+        elif format == self._format:
+            pass
+        elif format == 5:
             raise NotImplementedError
-        
-        # XXX hardcoding sucks
-        size = 16
-        for _, w in zip(range(size), word_iterator(data, 16)):
-            r = (w & 0x1f) * 255 // 31
-            g = ((w >> 5) & 0x1f) * 255 // 31
-            b = ((w >> 10) & 0x1f) * 255 // 31
-            self.colors.append((r, g, b))
+        elif format == 7:
+            #direct color texture -- no palette
+            raise ValueError
+        else:
+            self._format = format
+            size = 1 << bpp[format]
+            for _, w in zip(range(size), word_iterator(self.data, 16)):
+                r = (w & 0x1f) * 255 // 31
+                g = ((w >> 5) & 0x1f) * 255 // 31
+                b = ((w >> 10) & 0x1f) * 255 // 31
+                self.colors.append((r, g, b))
+
+    def get_format(self):
+        return self._format
+
+    format = property(get_format, set_format)
             
     def png(self):
         """Returns a PNG illustrating the colors in this palette."""
@@ -250,13 +334,3 @@ class Palette:
         """Returns this palette as a PNG."""
         return self.png()
 
-        
-if __name__ == '__main__':
-    f = open("/home/andrew/heartgold.nds:data/a/0/8/1/827", "rb")
-    T = TextureList(f)
-    for t in range(8):
-        for p in range(2):
-            out = open("/home/andrew/scrap/btx0/827-%d-%d.png" % (t, p), "wb")
-            out.write(T.png(t, p))
-            out.close()
-    #p = t.png(1,1)
