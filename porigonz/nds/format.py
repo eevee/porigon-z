@@ -54,13 +54,26 @@ def sprite_part(chunks, *args, **kwargs):
 
 def texture(chunks, *args, **kwargs):
     """textures"""
-
     for chunk in chunks:
         if chunk[:4] == 'BTX0':
             btx = NSBTX(chunk)
-            tex = btx.blocks[0]
+            for tex in btx.blocks:
+                for palette in tex.palettes:
+                    for texture in tex.textures:
+                        yield texture.png(palette)
+        elif chunk[:4] == 'BMD0':
+            # this might have a texture we can use, but 
+            # i don't know how to deal with them yet
+            pass
+        else:
+            pass
 
-            yield tex
+def overworld_sprites(chunks, *args, **kwargs):
+    for chunk in chunks:
+        if chunk[:4] == 'BTX0':
+            btx = NSBTX(chunk)
+            for tex in btx.blocks:
+                yield tex
         elif chunk[:4] == 'BMD0':
             # this might have a texture we can use, but 
             # i don't know how to deal with them yet
@@ -154,4 +167,24 @@ def pokemon_sprite_part(chunks, *args, **kwargs):
                 yield None
 
     return generator(chunks)
+
+def pokemon_overworld_sprites(chunks, shiny = False, *args, **kwargs):
+    for chunk in chunks:
+        if chunk[:4] == 'BTX0':
+            btx = NSBTX(chunk)
+            for tex in btx.blocks:
+                if getattr(tex, 'name', None) != 'tsure_poke':
+                    continue
+                    
+                palette = tex.palettes[1 if shiny else 0]
+                yield tex.png(palette)
+        elif chunk[:4] == 'BMD0':
+            # this might have a texture we can use, but 
+            # i don't know how to deal with them yet
+            pass
+        else:
+            pass
+
+def pokemon_overworld_sprites_shiny(chunks, *args, **kwargs):
+    return pokemon_overworld_sprites(chunks, shiny=True, *args, **kwargs)
 

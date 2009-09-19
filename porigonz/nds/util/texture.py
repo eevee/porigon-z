@@ -4,6 +4,7 @@ from PIL import Image
 from cStringIO import StringIO
 from collections import namedtuple
 from itertools import izip as zip
+from math import sqrt, ceil
 
 from porigonz.nds.util import word_iterator
 
@@ -160,6 +161,9 @@ class TextureBlock:
         for t, name in zip(self.textures, tex0.texture.names):
             t.name = name
 
+        if '.' in name:
+            self.name = name.split('.', 1)[0]
+
     def get_texture(self, value):
         if hasattr(value, '__index__'):
             value = value.__index__()
@@ -172,8 +176,17 @@ class TextureBlock:
     __getitem__ = get_texture
 
     def image(self, palette=None):
-        width = min(4, self.texture_count)
-        height = self.texture_count // width
+        if self.texture_count <= 4:
+            width = self.texture_count
+            height = 1
+        else:
+            # pick the greatest width such that width < height
+            # and height is a multiple of 4
+            height = 4
+            width = self.texture_count // height
+            while self.texture_count % 4 == 0 and 4 < width:
+                height += 4
+                width = self.texture_count // height
 
         #i'm assuming that all the textures are the same size
         size = self.textures[0].size
@@ -205,10 +218,7 @@ class TextureBlock:
             bigimg.paste(img, point)
 
         return bigimg
-            
-        #palette = Palette(tex.format,
-        #                  self.tex0.palette.data[self.tex0.palette.offsets[pal]:])
-        #return tex.png(palette)
+
 
     def png(self, palette=None):
         img = self.image(palette)
