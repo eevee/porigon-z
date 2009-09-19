@@ -54,24 +54,17 @@ def sprite_part(chunks, *args, **kwargs):
 
 def texture(chunks, *args, **kwargs):
     """textures"""
-    for chunk in chunks:
-        if chunk[:4] == 'BTX0':
-            btx = NSBTX(chunk)
-            for tex in btx.blocks:
-                for palette in tex.palettes:
-                    for texture in tex.textures:
-                        yield texture.png(palette)
-        elif chunk[:4] == 'BMD0':
-            # this might have a texture we can use, but 
-            # i don't know how to deal with them yet
-            pass
-        else:
-            pass
+    for tex in texture_part(chunks):
+        for palette in tex.palettes:
+            for texture in tex.textures:
+                yield texture.png(palette)
 
-def overworld_sprites(chunks, *args, **kwargs):
+def texture_part(chunks):
     for chunk in chunks:
         if chunk[:4] == 'BTX0':
             btx = NSBTX(chunk)
+            # i've never seen a btx0 chunk with more than one block,
+            # but that's not going to stop me!
             for tex in btx.blocks:
                 yield tex
         elif chunk[:4] == 'BMD0':
@@ -80,10 +73,11 @@ def overworld_sprites(chunks, *args, **kwargs):
             pass
         else:
             pass
+    
+def overworld_sprites(chunks, *args, **kwargs):
+    for tex in texture_part(chunks):
+        yield tex
 
-        #palette = tex.palettes[0]
-        #for texture in tex.textures:
-        #    yield texture.png()
 
 
 ### Pokémon-specific
@@ -168,22 +162,13 @@ def pokemon_sprite_part(chunks, *args, **kwargs):
 
     return generator(chunks)
 
-def pokemon_overworld_sprites(chunks, shiny = False, *args, **kwargs):
-    for chunk in chunks:
-        if chunk[:4] == 'BTX0':
-            btx = NSBTX(chunk)
-            for tex in btx.blocks:
-                if getattr(tex, 'name', None) != 'tsure_poke':
-                    continue
-                    
-                palette = tex.palettes[1 if shiny else 0]
-                yield tex.png(palette)
-        elif chunk[:4] == 'BMD0':
-            # this might have a texture we can use, but 
-            # i don't know how to deal with them yet
-            pass
-        else:
-            pass
+def pokemon_overworld_sprites(chunks, shiny=False, *args, **kwargs):
+    for tex in texture_part(chunks):
+        if getattr(tex, 'name', None) != 'tsure_poke':
+            continue
+            
+        palette = tex.palettes[1 if shiny else 0]
+        yield tex.png(palette)
 
 def pokemon_overworld_sprites_shiny(chunks, *args, **kwargs):
     return pokemon_overworld_sprites(chunks, shiny=True, *args, **kwargs)

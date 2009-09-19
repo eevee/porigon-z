@@ -182,13 +182,14 @@ class TextureBlock:
         else:
             # pick the greatest width such that width < height
             # and height is a multiple of 4
+            # XXX better algorithm?
             height = 4
             width = self.texture_count // height
             while self.texture_count % 4 == 0 and 4 < width:
                 height += 4
                 width = self.texture_count // height
 
-        #i'm assuming that all the textures are the same size
+        # XXX i'm assuming that all the textures are the same size
         size = self.textures[0].size
         #flag = False
         #for t in self.textures:
@@ -247,6 +248,7 @@ class Texture:
         self._pixels = [[0] * self.size.height for _ in range(self.size.width)]
         pixdata = self.data.value
         format = self.format
+        # XXX do the rest of the formats
         if format == 3:
             # 16-color palette
             it = word_iterator(pixdata, 4)
@@ -255,6 +257,7 @@ class Texture:
                     pix = it.next()
                     self._pixels[x][y] = pix
         elif format == 5:
+            # XXX do it
             raise NotImplementedError
         else:
             raise NotImplementedError
@@ -308,6 +311,7 @@ class Palette:
         elif format == self._format:
             pass
         elif format == 5:
+            # XXX do it
             raise NotImplementedError
         elif format == 7:
             #direct color texture -- no palette
