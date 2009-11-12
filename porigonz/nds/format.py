@@ -14,8 +14,10 @@ list, always use `list()` on the return value.
 """
 
 import binascii
+import pkg_resources
 
 from porigonz.nds.util.sprites import Sprite, Palette
+from porigonz.nds.util.text import CharacterTable
 from porigonz.nds.util.texture import NSBTX
 
 
@@ -68,12 +70,12 @@ def texture_part(chunks):
             for tex in btx.blocks:
                 yield tex
         elif chunk[:4] == 'BMD0':
-            # this might have a texture we can use, but 
+            # this might have a texture we can use, but
             # i don't know how to deal with them yet
             pass
         else:
             pass
-    
+
 def overworld_sprites(chunks, *args, **kwargs):
     for tex in texture_part(chunks):
         yield tex
