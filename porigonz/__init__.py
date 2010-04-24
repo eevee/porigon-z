@@ -1,5 +1,4 @@
 import binascii
-import codecs
 from optparse import OptionParser
 import os
 import re
@@ -195,8 +194,8 @@ def command_extract(image, args):
                 dsfilename = unicode(n)
 
                 fspath = os.path.join(fsdir, dsfilename)
-                fsfile = codecs.open(fspath, 'wb', 'utf-8')
-                fsfile.write(unicode( chunk ))
+                fsfile = open(fspath, 'wb')
+                fsfile.write(str( chunk ))
                 fsfile.close()
 
         else:

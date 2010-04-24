@@ -96,7 +96,8 @@ def pokemon_text(chunks, *args, **kwargs):
     stream = pkg_resources.resource_stream('porigonz', 'data/pokemon.tbl')
     tbl = CharacterTable.from_stream(stream)
 
-    return ("\n".join( tbl.pokemon_translate(chunk) ) for chunk in chunks)
+    return (u"\n".join(tbl.pokemon_translate(chunk)).encode("utf-8")
+            for chunk in chunks)
 
 def pokemon_sprite(chunks, *args, **kwargs):
     """Decrypt the chunks with Pokémon sprite encryption.

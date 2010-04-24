@@ -27,20 +27,20 @@ class CharacterTable(object):
         self = cls()
         for line in f:
             line = line.decode('utf8')
-            from_, _, to = line.partition('=')
+            from_, _, to = line.partition(u'=')
 
             from_ = int(from_, 16)
 
             # Character table contains some escapes
-            to = to.replace('\n', '')
-            if to == '\\n':
-                to = '\n'
-            elif to == '\\r':
-                to = '\r'
-            elif to[0:2] == '\\x':
+            to = to.rstrip(u'\n')
+            if to == u'\\n':
+                to = u'\n'
+            elif to == u'\\r':
+                to = u'\r'
+            elif to.startswith(u'\\x'):
                 # TODO shouldn't need this nonsense
                 # XXX are these even correct?  they tend to map abcd to \xabcd
-                to = int(to[2:6], 16)
+                to = unichr(int(to[2:6], 16))
 
             self.add_mapping(from_, to)
 
@@ -50,16 +50,16 @@ class CharacterTable(object):
         """Adds a character mapping.
 
         `from_` may be either an integer or a character.
-        `to` must be a character.
+        `to` must be a unicode character.
         """
         if isinstance(from_, basestring):
             from_ = ord(from_)
 
-        self._tbl[from_] = unicode(to)
+        self._tbl[from_] = to
 
 
     def pokemon_translate(self, src):
-        """Translates a raw block of text to readable UTF-8, using the
+        """Translates a raw block of text to readable unicode, using the
         encryption from the Gen IV Pokémon games.
 
         These blocks actually contain a list of multiple strings.  The whole
@@ -97,19 +97,19 @@ class CharacterTable(object):
                 ch = self._tbl.get(n, None)
 
                 if ch == None or n < 32:
-                    dest_chars.append(r"\u%04x" % n)
-                elif ch == '\r':
-                    dest_chars.append(r'\r')
-                elif ch == '\n':
-                    dest_chars.append(r'\n')
-                elif ch == '\t':
-                    dest_chars.append(r'\t')
+                    dest_chars.append(u"\\u%04x" % n)
+                elif ch == u'\r':
+                    dest_chars.append(u'\\r')
+                elif ch == u'\n':
+                    dest_chars.append(u'\\n')
+                elif ch == u'\t':
+                    dest_chars.append(u'\\t')
                 else:
                     dest_chars.append(ch)
 
                 # Rotate key
                 key = cap_to_bits(key + 0x493d, 16)
 
-            strings.append( ''.join(dest_chars) )
+            strings.append( u''.join(dest_chars) )
 
         return strings
