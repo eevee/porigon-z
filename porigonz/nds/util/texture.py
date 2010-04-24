@@ -1,10 +1,8 @@
 from construct import *
-from construct.lib import int_to_bin, bin_to_int
 from PIL import Image
 from cStringIO import StringIO
 from collections import namedtuple
 from itertools import izip as zip
-from math import sqrt, ceil
 
 from porigonz.nds.util import word_iterator
 

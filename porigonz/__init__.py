@@ -1,4 +1,3 @@
-import binascii
 from optparse import OptionParser
 import os
 import re
@@ -7,8 +6,6 @@ from sys import argv, exit, stderr, stdout
 
 from porigonz.nds import DSImage
 from porigonz.nds import format
-from porigonz.nds.util.text import CharacterTable
-from porigonz.nds.util.sprites import Palette, Sprite
 
 help = """porigon-z: a Nintendo DS game image inspector aimed at Pokemon
 Syntax: porigon-z {path-to-image-file} {command} ...

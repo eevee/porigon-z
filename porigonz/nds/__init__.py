@@ -12,8 +12,6 @@ from weakref import ref
 
 from construct import *
 
-from porigonz.nds import util
-
 # Useful for much of the below: http://llref.emutalk.net/nds_formats.htm
 
 # DS uses UTF-16 null-terminated strings for a lot of text
