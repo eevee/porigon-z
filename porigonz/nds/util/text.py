@@ -27,8 +27,8 @@ class CharacterTable(object):
         self = cls()
         for line in f:
             line = line.decode('utf8')
-            from_, _, to = line.partition(u'=')
 
+            from_, _, to = line.partition(u'=')
             from_ = int(from_, 16)
 
             # Character table contains some escapes
@@ -37,9 +37,10 @@ class CharacterTable(object):
                 to = u'\n'
             elif to == u'\\r':
                 to = u'\r'
+            elif to == u'\\f':
+                to = u'\f'
             elif to.startswith(u'\\x'):
-                # TODO shouldn't need this nonsense
-                # XXX are these even correct?  they tend to map abcd to \xabcd
+                # XXX are these correct or necessary?  they tend to map abcd to \xabcd
                 to = unichr(int(to[2:6], 16))
 
             self.add_mapping(from_, to)
@@ -96,14 +97,17 @@ class CharacterTable(object):
 
                 ch = self._tbl.get(n, None)
 
-                if ch == None or n < 32:
-                    dest_chars.append(u"\\u%04x" % n)
-                elif ch == u'\r':
+                if ch == u'\r':
                     dest_chars.append(u'\\r')
                 elif ch == u'\n':
                     dest_chars.append(u'\\n')
                 elif ch == u'\t':
                     dest_chars.append(u'\\t')
+                elif ch == u'\f':
+                    dest_chars.append(u'\\f')
+                elif ch is None or ord(ch) < 32:
+                    # Either unknown, or a weird control character
+                    dest_chars.append(u"\\u%04x" % n)
                 else:
                     dest_chars.append(ch)
 
