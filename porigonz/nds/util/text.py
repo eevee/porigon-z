@@ -1,19 +1,18 @@
 # encoding: utf8
 """Utility functions and classes for working with DS text."""
-from __future__ import unicode_literals
 
 from construct import *
 
 from porigonz.nds.util import cap_to_bits
 
-pokemon_encrypted_text_struct = Struct(b'pokemon_text',
-    ULInt16(b'count'),
-    ULInt16(b'key'),
+pokemon_encrypted_text_struct = Struct('pokemon_text',
+    ULInt16('count'),
+    ULInt16('key'),
     MetaRepeater(
-        lambda ctx: ctx[b'count'],
-        Struct(b'header',
-            ULInt32(b'offset'),
-            ULInt32(b'length'),
+        lambda ctx: ctx['count'],
+        Struct('header',
+            ULInt32('offset'),
+            ULInt32('length'),
         ),
     ),
 )
@@ -28,20 +27,19 @@ class CharacterTable(object):
         self = cls()
         for line in f:
             line = line.decode('utf8')
+            from_, _, to = line.partition(u'=')
 
-            from_, _, to = line.partition('=')
             from_ = int(from_, 16)
 
             # Character table contains some escapes
-            to = to.rstrip('\n')
-            if to == '\\n':
-                to = '\n'
-            elif to == '\\r':
-                to = '\r'
-            elif to == '\\f':
-                to = '\f'
-            elif to[0:2] == '\\x':
-                # XXX are these correct or necessary?  they tend to map abcd to \xabcd
+            to = to.rstrip(u'\n')
+            if to == u'\\n':
+                to = u'\n'
+            elif to == u'\\r':
+                to = u'\r'
+            elif to.startswith(u'\\x'):
+                # TODO shouldn't need this nonsense
+                # XXX are these even correct?  they tend to map abcd to \xabcd
                 to = unichr(int(to[2:6], 16))
 
             self.add_mapping(from_, to)
@@ -98,17 +96,14 @@ class CharacterTable(object):
 
                 ch = self._tbl.get(n, None)
 
-                if ch == '\r':
-                    dest_chars.append('\\r')
-                elif ch == '\n':
-                    dest_chars.append('\\n')
-                elif ch == '\t':
-                    dest_chars.append('\\t')
-                elif ch == '\f':
-                    dest_chars.append('\\f')
-                elif ch == None or ord(ch[0]) < 32:
-                    # Either unknown, or a weird control character
-                    dest_chars.append("\\u%04x" % n)
+                if ch == None or n < 32:
+                    dest_chars.append(u"\\u%04x" % n)
+                elif ch == u'\r':
+                    dest_chars.append(u'\\r')
+                elif ch == u'\n':
+                    dest_chars.append(u'\\n')
+                elif ch == u'\t':
+                    dest_chars.append(u'\\t')
                 else:
                     dest_chars.append(ch)
 
