@@ -120,10 +120,10 @@ class Sprite(object):
         # XXX make these less constant somehow
         self.size = Size(width=64, height=64)
 
-        self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
+        self.pixels = [[0] * self.size.width for _ in range(self.size.height)]
         for i, word in enumerate(word_iterator(rahc.data, 4)):
             x, y = self.get_pos(i, tile_size=8)
-            self.pixels[x][y] = word
+            self.pixels[y][x] = word
 
         return self
 
@@ -184,10 +184,10 @@ class Sprite(object):
                     yield cap_to_bits(unmasked, 4)
                     unmasked >>= 4
 
-        self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
+        self.pixels = [[0] * self.size.width for _ in range(self.size.height)]
         for i, pixel in enumerate(pixel_generator()):
             x, y = self.get_pos(i)
-            self.pixels[x][y] = pixel
+            self.pixels[y][x] = pixel
         print i, x, y
 
         return self
@@ -244,7 +244,7 @@ class Sprite(object):
         writer = png.Writer(**writer_options)
         buffer = StringIO()
 
-        writer.write(buffer, zip(*self.pixels))  # The zip is to iterate over rows
+        writer.write(buffer, self.pixels)
         return buffer.getvalue()
 
     def __str__(self):

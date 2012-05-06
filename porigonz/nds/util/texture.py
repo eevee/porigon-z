@@ -228,7 +228,7 @@ class TextureBlock:
                                        for x in xrange(width))):
             x *= size.width
             y *= size.height
-            for row_num, row in enumerate(zip(*t.pixels)):
+            for row_num, row in enumerate(t.pixels):
                 bigimg[y + row_num][x:x + size.width] = row
 
         writer = png.Writer(**writer_options)
@@ -260,10 +260,10 @@ class Texture:
         if format == 3:
             # 16-color palette
             it = word_iterator(pixdata, 4)
-            for y in range(self.info.height):
-                for x in range(self.info.width):
+            for x in range(self.info.width):
+                for y in range(self.info.height):
                     pix = it.next()
-                    self._pixels[x][y] = pix
+                    self._pixels[y][x] = pix
         elif format == 5:
             # XXX do it
             raise NotImplementedError
@@ -295,7 +295,7 @@ class Texture:
         writer = png.Writer(**writer_options)
         buffer = StringIO()
 
-        writer.write(buffer, zip(*self.pixels))  # The zip is to iterate over rows
+        writer.write(buffer, self.pixels)
         return buffer.getvalue()
 
     def __str__(self):
