@@ -6,7 +6,7 @@ from cStringIO import StringIO
 from itertools import izip
 
 from construct import *
-from PIL import Image
+import png
 
 from porigonz.nds.util import cap_to_bits, word_iterator
 
@@ -60,15 +60,13 @@ class Palette(object):
     def png(self):
         """Returns a PNG illustrating the colors in this palette."""
 
-        img = Image.new(mode='RGB', size=(len(self.colors), 1), color=None)
+        img = [index for index in range(len(self.colors))
+               for col_repeat in range(8)]
+        img = [img] * 8
 
-        for i, color in enumerate(self.colors):
-            img.putpixel((i, 0), color)
-
-        img = img.resize((8 * len(self.colors), 8))
-
+        writer = png.Writer(len(self.colors) * 8, 8, palette=self.colors)
         buffer = StringIO()
-        img.save(buffer, 'PNG')
+        writer.write(buffer, img)
         return buffer.getvalue()
 
     def __str__(self):
@@ -119,7 +117,7 @@ class Sprite(object):
         rahc = rahc_struct.parse(rgcn.data)
 
         # XXX make these less constant somehow
-        self.size = Size(width=32, height=128)
+        self.size = Size(width=64, height=64)
 
         self.pixels = [[0] * self.size.height for _ in range(self.size.width)]
         for i, word in enumerate(word_iterator(rahc.data, 4)):
@@ -228,8 +226,6 @@ class Sprite(object):
     def png(self, palette=None):
         """Returns this sprite as a PNG.  Colors are merely shades of gray,
         unless a palette is provided."""
-        img = Image.new(mode='RGBA', size=self.size, color=None)
-
         if palette:
             colors = palette.colors
         else:
@@ -238,13 +234,10 @@ class Sprite(object):
         # Add alpha channel.  First color is always transparent
         colors = [(0, 0, 0, 0)] + [color + (255,) for color in colors[1:]]
 
-        data = img.load()
-        for x in xrange(self.size.width):
-            for y in xrange(self.size.height):
-                data[x, y] = colors[ self.pixels[x][y] ]
-
+        writer = png.Writer(size=self.size, palette=colors)
         buffer = StringIO()
-        img.save(buffer, 'PNG')
+
+        writer.write(buffer, zip(*self.pixels))  # The zip is to iterate over rows
         return buffer.getvalue()
 
     def __str__(self):

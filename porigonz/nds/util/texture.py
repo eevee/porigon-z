@@ -1,8 +1,9 @@
 from construct import *
-from PIL import Image
 from cStringIO import StringIO
 from collections import namedtuple
 from itertools import izip as zip
+
+import png
 
 from porigonz.nds.util import word_iterator
 
@@ -173,7 +174,7 @@ class TextureBlock:
 
     __getitem__ = get_texture
 
-    def image(self, palette=None):
+    def png(self, palette=None):
         if self.texture_count <= 4:
             width = self.texture_count
             height = 1
@@ -207,23 +208,23 @@ class TextureBlock:
         if palette is None:
             palette = self.palettes[0]
 
-        bigimg = Image.new(mode="RGBA", size=(size.width*width, size.height*height))
+        palette = palette.colors or [(x, x, x) for x in range(0, 256, 17)]
+
+        bigimg = [[0 for x in xrange(size.width * width)]
+                  for y in xrange(size.height * height)]
 
         for t, (x, y) in zip(textures, 
                              ((x, y) for y in xrange(height)
                                        for x in xrange(width))):
-            point = (x * size.width, y * size.height)
-            img = t.image(palette)
-            bigimg.paste(img, point)
+            x *= size.width
+            y *= size.height
+            for row_num, row in enumerate(zip(*t.pixels)):
+                bigimg[y + row_num][x:x + size.width] = row
 
-        return bigimg
-
-
-    def png(self, palette=None):
-        img = self.image(palette)
-
+        writer = png.Writer(size.width * width, size.height * height,
+                            palette=palette)
         buffer = StringIO()
-        img.save(buffer, 'PNG')
+        writer.write(buffer, bigimg)
         return buffer.getvalue()
 
 
@@ -263,9 +264,7 @@ class Texture:
         return self._pixels
 
 
-    def image(self, palette=None):
-        img = Image.new(mode='RGBA', size=self.size, color=None)
-
+    def png(self, palette=None):
         if palette:
             if palette.format is None:
                 palette.format = self.format
@@ -277,18 +276,10 @@ class Texture:
         if self.info.color0:
             colors[0] = colors[0][:3] + (0,)
 
-        data = img.load()
-        for x in xrange(self.info.width):
-            for y in xrange(self.info.height):
-                data[x, y] = colors[self.pixels[x][y]]
-
-        return img
-
-    def png(self, palette=None):
-        img = self.image(palette)
-
+        writer = png.Writer(self.info.width, self.info.height, palette=colors)
         buffer = StringIO()
-        img.save(buffer, 'PNG')
+
+        writer.write(buffer, zip(*self.pixels))
         return buffer.getvalue()
 
     def __str__(self):
@@ -331,15 +322,13 @@ class Palette:
     def png(self):
         """Returns a PNG illustrating the colors in this palette."""
 
-        img = Image.new(mode='RGB', size=(len(self.colors), 1), color=None)
+        img = [index for index in range(len(self.colors))
+               for col_repeat in range(8)]
+        img = [img] * 8
 
-        for i, color in enumerate(self.colors):
-            img.putpixel((i, 0), color)
-
-        img = img.resize((8 * len(self.colors), 8))
-
+        writer = png.Writer(len(self.colors) * 8, 8, palette=self.colors)
         buffer = StringIO()
-        img.save(buffer, 'PNG')
+        writer.write(buffer, img)
         return buffer.getvalue()
 
     def __str__(self):
