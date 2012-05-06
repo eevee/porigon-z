@@ -205,13 +205,23 @@ class TextureBlock:
             except ValueError:
                 pass
 
+        block_width = size.width * width
+        block_height = size.height * height
+
+        writer_options = {'width': block_width, 'height': block_height}
+
         if palette is None:
             palette = self.palettes[0]
 
-        palette = palette.colors or [(x, x, x) for x in range(0, 256, 17)]
+        if palette.colors:
+            writer_options['palette'] = palette.colors
+            writer_options['bitdepth'] = 5
+        else:
+            writer_options['greyscale'] = True
+            writer_options['bitdepth'] = 4
 
-        bigimg = [[0 for x in xrange(size.width * width)]
-                  for y in xrange(size.height * height)]
+        bigimg = [[0 for x in xrange(block_width)]
+                  for y in xrange(block_height)]
 
         for t, (x, y) in zip(textures, 
                              ((x, y) for y in xrange(height)
@@ -221,8 +231,7 @@ class TextureBlock:
             for row_num, row in enumerate(zip(*t.pixels)):
                 bigimg[y + row_num][x:x + size.width] = row
 
-        writer = png.Writer(size.width * width, size.height * height,
-                            palette=palette)
+        writer = png.Writer(**writer_options)
         buffer = StringIO()
         writer.write(buffer, bigimg)
         return buffer.getvalue()
@@ -265,21 +274,28 @@ class Texture:
 
 
     def png(self, palette=None):
+        writer_options = {'size': self.size}
+
         if palette:
             if palette.format is None:
                 palette.format = self.format
-            colors = palette.colors
+
+            writer_options['palette'] = palette.colors
+            writer_options['alpha'] = True
+            writer_options['bit_depth'] = 5
+
+            if self.info.color0:
+                # First entry is transparent
+                writer_options['palette'][0] += (0,)
         else:
-            colors = [(sat, sat, sat) for sat in ((15 - _) * 255 / 15 for _ in range(16))]
+            writer_options['greyscale'] = True
+            writer_options['transparent'] = 0
+            writer_options['bit_depth'] = 4
 
-        colors = [color + (255,) for color in colors]
-        if self.info.color0:
-            colors[0] = colors[0][:3] + (0,)
-
-        writer = png.Writer(self.info.width, self.info.height, palette=colors)
+        writer = png.Writer(**writer_options)
         buffer = StringIO()
 
-        writer.write(buffer, zip(*self.pixels))
+        writer.write(buffer, zip(*self.pixels))  # The zip is to iterate over rows
         return buffer.getvalue()
 
     def __str__(self):
@@ -309,9 +325,9 @@ class Palette:
             self._format = format
             size = 1 << bpp[format]
             for _, w in zip(range(size), word_iterator(self.data, 16)):
-                r = (w & 0x1f) * 255 // 31
-                g = ((w >> 5) & 0x1f) * 255 // 31
-                b = ((w >> 10) & 0x1f) * 255 // 31
+                r = w & 0x1f
+                g = (w >> 5) & 0x1f
+                b = (w >> 10) & 0x1f
                 self.colors.append((r, g, b))
 
     def get_format(self):
@@ -326,7 +342,8 @@ class Palette:
                for col_repeat in range(8)]
         img = [img] * 8
 
-        writer = png.Writer(len(self.colors) * 8, 8, palette=self.colors)
+        writer = png.Writer(len(self.colors) * 8, 8,
+                            palette=self.colors, bitdepth=5)
         buffer = StringIO()
         writer.write(buffer, img)
         return buffer.getvalue()

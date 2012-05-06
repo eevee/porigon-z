@@ -51,9 +51,9 @@ class Palette(object):
         ttlp = ttlp_struct.parse(nclr.data)
 
         for palette_word in word_iterator(ttlp.data, 16):
-            r = ((palette_word & 0x001f)      ) * 255 // 31
-            g = ((palette_word & 0x03e0) >> 5 ) * 255 // 31
-            b = ((palette_word & 0x7c00) >> 10) * 255 // 31
+            r = (palette_word & 0x001f)
+            g = (palette_word & 0x03e0) >> 5
+            b = (palette_word & 0x7c00) >> 10
 
             self.colors.append((r, g, b))
 
@@ -64,7 +64,8 @@ class Palette(object):
                for col_repeat in range(8)]
         img = [img] * 8
 
-        writer = png.Writer(len(self.colors) * 8, 8, palette=self.colors)
+        writer = png.Writer(len(self.colors) * 8, 8,
+                            palette=self.colors, bitdepth=5)
         buffer = StringIO()
         writer.write(buffer, img)
         return buffer.getvalue()
@@ -220,21 +221,27 @@ class Sprite(object):
     def fake_color(self, idx):
         """Given a palette index, returns a unique fake color to represent it.
         """
-        sat = idx * 255 / 15
+        sat = idx * 2
         return sat, sat, sat
 
     def png(self, palette=None):
         """Returns this sprite as a PNG.  Colors are merely shades of gray,
         unless a palette is provided."""
+        writer_options = {'size': self.size}
+
         if palette:
-            colors = palette.colors
+            writer_options['palette'] = palette.colors
+            writer_options['alpha'] = True
+            writer_options['bitdepth'] = 5
+
+            # First entry is transparent
+            writer_options['palette'][0] += (0,)
         else:
-            colors = [(sat, sat, sat) for sat in ((15 - _) * 255 / 15 for _ in range(16))]
+            writer_options['greyscale'] = True
+            writer_options['transparent'] = 0
+            writer_options['bitdepth'] = 4
 
-        # Add alpha channel.  First color is always transparent
-        colors = [(0, 0, 0, 0)] + [color + (255,) for color in colors[1:]]
-
-        writer = png.Writer(size=self.size, palette=colors)
+        writer = png.Writer(**writer_options)
         buffer = StringIO()
 
         writer.write(buffer, zip(*self.pixels))  # The zip is to iterate over rows
