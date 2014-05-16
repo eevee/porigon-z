@@ -18,8 +18,15 @@ pokemon_encrypted_text_struct = Struct('pokemon_text',
 )
 
 class CharacterTable(object):
+    friendly_display_mapping = {
+        ord(u'\r'): u'\\r',
+        ord(u'\n'): u'\\n',
+        ord(u'\f'): u'\\f',
+        ord(u'\t'): u'\\t',
+    }
+
     def __init__(self):
-        self._tbl = {}
+        self.mapping_table = {}
         pass
 
     @classmethod
@@ -56,11 +63,24 @@ class CharacterTable(object):
         if isinstance(from_, basestring):
             from_ = ord(from_)
 
-        self._tbl[from_] = to
+        self.mapping_table[from_] = to
 
+
+    def escape_control_chars(self, string):
+        """Returns `string` with control characters escaped.
+
+        C-style single-letter escapes are used when possible.
+        """
+        return string.translate(self.friendly_display_mapping)
+
+    def pokemon_decode_string(self, string):
+        u"""Decodes (in the character set sense) a string of Pokémon text,
+        returning real Unicode.
+        """
+        return string.translate(self.mapping_table)
 
     def pokemon_translate(self, src):
-        """Translates a raw block of text to readable unicode, using the
+        u"""Translates a raw block of text to readable unicode, using the
         encryption from the Gen IV Pokémon games.
 
         These blocks actually contain a list of multiple strings.  The whole
@@ -88,32 +108,19 @@ class CharacterTable(object):
             offset = header.offset
             length = header.length
 
-            key = cap_to_bits((i + 1) * 0x91bd3, 16)
-            text = src[offset:]
-            for pos in range(length):
+            key = ((i + 1) * 0x91bd3) & 0xffff
+            for pos in xrange(length):
                 # Characters are two bytes; get them and fix endianness
-                n = (ord(text[pos * 2 + 1]) << 8) | ord(text[pos * 2])
+                n = (ord(src[offset + pos * 2 + 1]) << 8) \
+                   | ord(src[offset + pos * 2])
                 n ^= key
 
-                ch = self._tbl.get(n, None)
-
-                if ch == u'\r':
-                    dest_chars.append(u'\\r')
-                elif ch == u'\n':
-                    dest_chars.append(u'\\n')
-                elif ch == u'\t':
-                    dest_chars.append(u'\\t')
-                elif ch == u'\f':
-                    dest_chars.append(u'\\f')
-                elif ch is None or ord(ch) < 32:
-                    # Either unknown, or a weird control character
-                    dest_chars.append(u"\\u%04x" % n)
-                else:
-                    dest_chars.append(ch)
+                dest_chars.append(unichr(n))
 
                 # Rotate key
-                key = cap_to_bits(key + 0x493d, 16)
+                key = (key + 0x493d) & 0xffff
 
-            strings.append( u''.join(dest_chars) )
+            dest_string = u''.join(dest_chars)
+            strings.append(self.escape_control_chars(self.pokemon_decode_string(dest_string)))
 
         return strings
